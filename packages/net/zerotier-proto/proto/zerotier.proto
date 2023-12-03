@@ -1,0 +1,120 @@
+#!/bin/sh
+
+readonly PKG_VERSION='dev-test'
+readonly PROG=/usr/bin/zerotier-one
+readonly PKG_NAME='zerotier-proto'
+
+[ -x "$PROG" ] || { log "Failed to find executable '$PROG'"; exit 1; }
+
+[ -n "$INCLUDE_ONLY" ] || {
+    . /lib/functions.sh
+    . /lib/functions/network.sh
+    . ../netifd-proto.sh
+    init_proto "$@"
+}
+
+log() { logger -t "$PKG_NAME" "$*"; }
+
+proto_zerotier_init_config() {
+    available=1
+    no_device=1
+    proto_config_add_string "network_id"
+    proto_config_add_string "moon_id"
+    proto_config_add_string "secret"
+}
+
+proto_zerotier_setup() {
+    local interface="$1"
+    local config_path="/var/lib/zerotier-proto/$interface"
+
+    local network_id moon_id secret
+    config_load network
+	config_get network_id "$interface" "network_id"
+    config_get moon_id "$interface" "moon_id"
+    config_get secret "$interface" "secret"
+
+    [ -z "$network_id" ] && { log "Network ID should not be empty!"; return 1; }
+
+    # wait for internet conn
+    proto_add_host_dependency "$interface" "8.8.8.8"
+
+    log "Setting up Zerotier interface '$interface' connected to network '$network_id'"
+    
+    rm -rf $config_path && mkdir -p $config_path
+
+    # prepare identity
+    if [ -z "$secret" ]; then
+        log "Generating secret for Zerotier interface '$interface'"
+
+        $PROG -i generate $config_path/identity.secret > /dev/null
+        [ $? -ne 0 ] && return 1
+
+        uci set network.$interface.secret="$(cat $config_path/identity.secret)"
+        uci commit network
+    else
+        echo "$secret" > $config_path/identity.secret
+    fi
+    $PROG -i getpublic $config_path/identity.secret > $config_path/identity.public
+
+    # join network
+    mkdir $config_path/networks.d
+    touch $config_path/networks.d/$network_id.conf
+
+    # configure iface
+    echo "$network_id=zt-$interface" > $config_path/devicemap
+
+    # start daemon
+    proto_run_command "$interface" "$PROG" -p0 "$config_path"
+
+    # wait status
+    local status
+    while true; do
+        status=$($PROG -q -D$config_path get $network_id status 2>/dev/null)
+        [ "$status" != "REQUESTING_CONFIGURATION" -a -n "$status" ] && break
+        sleep 1
+    done
+
+    if [ "$status" != "OK" ]; then
+        proto_zerotier_teardown "$interface"
+        proto_notify_error "$interface" "$status"
+        return 1
+    fi
+
+    # orbit moon
+    [ -n "$moon_id" ] && { $PROG -q -D$config_path orbit "$moon_id" "$moon_id"; }
+
+    # fetch interface name
+    local ifname=$($PROG -q -D$config_path get $network_id portDeviceName 2>/dev/null)
+
+    # update interface stats
+    proto_init_update "$ifname" 1
+
+    local addresses=$(ip -4 a list dev "$ifname" 2>/dev/null | grep inet | awk '{print $2}')
+    for address in $addresses; do
+		case "$address" in
+			*:*/*)
+				proto_add_ipv6_address "${address%%/*}" "${address##*/}"
+				;;
+			*.*/*)
+				proto_add_ipv4_address "${address%%/*}" "${address##*/}"
+				;;
+			*:*)
+				proto_add_ipv6_address "${address%%/*}" "128"
+				;;
+			*.*)
+				proto_add_ipv4_address "${address%%/*}" "32"
+				;;
+		esac
+	done
+
+    proto_send_update "$interface"
+}
+
+proto_zerotier_teardown() {
+    local interface="$1"
+    proto_kill_command "$interface"
+}
+
+[ -n "$INCLUDE_ONLY" ] || {
+    add_protocol zerotier
+}
