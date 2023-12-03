@@ -1,0 +1,41 @@
+name: AutoBuild
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build for ${{ matrix.release }}(${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        release:
+          - 23.05.2
+        arch:
+          - x86_64
+          - mips_24kc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: extra_packages
+
+      - name: Build
+        uses: openwrt/gh-action-sdk@v7
+        env:
+          V: s
+          FEEDNAME: action
+          ARCH: ${{ matrix.arch }}-${{ matrix.release }}
+          PACKAGES: zerotier-proto luci-proto-zerotier
+
+      - name: Publish Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: packages-${{ matrix.release }}-${{ matrix.arch }}
+          path: bin/packages/${{ matrix.arch }}/action/*
