@@ -1,6 +1,6 @@
 #!/bin/sh
 
-readonly PKG_VERSION='dev-test'
+readonly PKG_VERSION='dev'
 readonly PROG=/usr/bin/zerotier-one
 readonly PKG_NAME='zerotier-proto'
 
@@ -29,7 +29,7 @@ proto_zerotier_setup() {
 
     local network_id moon_id secret
     config_load network
-	config_get network_id "$interface" "network_id"
+    config_get network_id "$interface" "network_id"
     config_get moon_id "$interface" "moon_id"
     config_get secret "$interface" "secret"
 
@@ -38,13 +38,13 @@ proto_zerotier_setup() {
     # wait for internet conn
     proto_add_host_dependency "$interface" "8.8.8.8"
 
-    log "Setting up Zerotier interface '$interface' connected to network '$network_id'"
-    
+    log "Setting up ZeroTier interface '$interface' connected to network '$network_id'"
+
     rm -rf $config_path && mkdir -p $config_path
 
     # prepare identity
     if [ -z "$secret" ]; then
-        log "Generating secret for Zerotier interface '$interface'"
+        log "Generating secret for ZeroTier interface '$interface'"
 
         $PROG -i generate $config_path/identity.secret > /dev/null
         [ $? -ne 0 ] && return 1
@@ -70,15 +70,10 @@ proto_zerotier_setup() {
     local status
     while true; do
         status=$($PROG -q -D$config_path get $network_id status 2>/dev/null)
-        [ "$status" != "REQUESTING_CONFIGURATION" -a -n "$status" ] && break
-        sleep 1
+        [ $? -ne 0 ] && { log "Wait for daemon startup"; sleep 1; continue; }
+        [ "$status" != "OK" ] && { log "Wait for status OK, got: $status"; sleep 5; continue; }
+        break
     done
-
-    if [ "$status" != "OK" ]; then
-        proto_zerotier_teardown "$interface"
-        proto_notify_error "$interface" "$status"
-        return 1
-    fi
 
     # orbit moon
     [ -n "$moon_id" ] && { $PROG -q -D$config_path orbit "$moon_id" "$moon_id"; }
@@ -91,21 +86,21 @@ proto_zerotier_setup() {
 
     local addresses=$(ip -4 a list dev "$ifname" 2>/dev/null | grep inet | awk '{print $2}')
     for address in $addresses; do
-		case "$address" in
-			*:*/*)
-				proto_add_ipv6_address "${address%%/*}" "${address##*/}"
-				;;
-			*.*/*)
-				proto_add_ipv4_address "${address%%/*}" "${address##*/}"
-				;;
-			*:*)
-				proto_add_ipv6_address "${address%%/*}" "128"
-				;;
-			*.*)
-				proto_add_ipv4_address "${address%%/*}" "32"
-				;;
-		esac
-	done
+        case "$address" in
+            *:*/*)
+                proto_add_ipv6_address "${address%%/*}" "${address##*/}"
+                ;;
+            *.*/*)
+                proto_add_ipv4_address "${address%%/*}" "${address##*/}"
+                ;;
+            *:*)
+                proto_add_ipv6_address "${address%%/*}" "128"
+                ;;
+            *.*)
+                proto_add_ipv4_address "${address%%/*}" "32"
+                ;;
+        esac
+    done
 
     proto_send_update "$interface"
 }

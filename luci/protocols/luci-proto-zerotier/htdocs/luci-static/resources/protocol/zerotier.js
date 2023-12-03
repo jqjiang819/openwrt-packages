@@ -9,7 +9,7 @@ network.registerPatternVirtual(/^zt-.+$/);
 
 return network.registerProtocol('zerotier', {
 	getI18n: function () {
-		return _('Zerotier');
+		return _('ZeroTier');
 	},
 
 	getIfname: function () {
@@ -42,10 +42,10 @@ return network.registerProtocol('zerotier', {
 		o = s.taboption('general', form.Value, 'network_id', _('Network ID'), _('Required. Network to join.'));
 		o.optional = false;
 		o.rmempty = false;
-        o = s.taboption('general', form.Value, 'moon_id', _('Moon ID'), _('Optional. Moon to orbit'));
+        o = s.taboption('general', form.Value, 'moon_id', _('Moon ID'), _('Optional. Moon to orbit.'));
 		o.optional = true;
 		o.rmempty = true;
-		o = s.taboption('general', form.Value, 'secret', _('Secret'), _('Your network identifier.'));
+		o = s.taboption('general', form.Value, 'secret', _('Secret'), _('Optional. Your network identifier. Leave it empty for auto generation.'));
 		o.optional = true;
 	},
 
