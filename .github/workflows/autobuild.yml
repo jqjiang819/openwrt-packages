@@ -36,7 +36,7 @@ jobs:
           PACKAGES: zerotier-proto luci-proto-zerotier
 
       - name: Publish Artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: packages-${{ matrix.release }}-${{ matrix.arch }}
           path: bin/packages/${{ matrix.arch }}/action/*
