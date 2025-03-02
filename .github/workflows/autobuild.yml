@@ -17,6 +17,7 @@ jobs:
       matrix:
         release:
           - 23.05.2
+          - 24.10.0
         arch:
           - x86_64
           - mips_24kc
